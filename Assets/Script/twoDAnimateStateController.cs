@@ -9,7 +9,10 @@ public class twoDAnimateStateController : MonoBehaviour
     public float deceleration = 2.0f;
     public float maximumWalkVelocity = 0.05f;
     public float maximumRunVelocity = 2.0f;
-
+    public float previosMaxVelocity = 2.0f;
+    public float smoothTime = 2.0f;
+    public float maxVelocityHolder = 1f;
+    public float currentMaxVelocity;
     // increase preformance
     int velocityZHash;
     int velocityXHash;
@@ -27,117 +30,69 @@ public class twoDAnimateStateController : MonoBehaviour
     {
         // set velocityZ and velocityX based on key inputs
 
-        if (forwardKey && velocityZ < currentMaxVelocity)
+        if (forwardKey)
         {
             velocityZ += Time.deltaTime * acceleration;
         }
-        if (leftKey && velocityX > -currentMaxVelocity)
-        {
-            velocityX -= Time.deltaTime * acceleration;
-        }
-        if (rightKey && velocityX < currentMaxVelocity)
-        {
-            velocityX += Time.deltaTime * acceleration;
-        }
-        //decelerate velocityZ to 0
-        if (!forwardKey && velocityZ > 0.0f)
+        else
         {
             velocityZ -= Time.deltaTime * deceleration;
         }
 
-        // increase velocityX if left is not pressed and velocityX is less than 0
-        if (!leftKey && velocityX < 0.0f)
+        // Ensure that the velocityZ stays within the bounds
+        velocityZ = Mathf.Clamp(velocityZ, 0.0f, currentMaxVelocity);
+
+        if (leftKey)
         {
-            velocityX += Time.deltaTime * deceleration;
+            velocityX -= Time.deltaTime * acceleration;
+        }
+        else if (rightKey)
+        {
+            velocityX += Time.deltaTime * acceleration;
+        }
+        else
+        {
+            var tempVelocity = Mathf.Abs(velocityX);
+            if (tempVelocity > 0.05f)
+            {
+                velocityX += Time.deltaTime * (velocityX > 0 ? -deceleration : acceleration);
+            }
+            else
+            {
+                velocityX = 0;
+            }
         }
 
-        if (!rightKey && velocityX > 0.0f)
-        {
-            velocityX -= Time.deltaTime * deceleration;
-        }
+        // Ensure that velocityX stays within the bounds
+        velocityX = Mathf.Clamp(velocityX, -currentMaxVelocity, currentMaxVelocity);
     }
 
 
     void lockOrResetVelocity(bool forwardKey, bool runKey, bool leftKey, bool rightKey, float currentMaxVelocity)
     {
-        //reset velocityZ
+        // reset velocityZ if it's below zero when no forward key is pressed
         if (!forwardKey && velocityZ < 0.0f)
         {
             velocityZ = 0.0f;
         }
 
 
-        // rest velocityX
+        // reset velocityX when neither left nor right is pressed and it's close to zero
         if (!leftKey && !rightKey && velocityX != 0.0f && (velocityX > -0.05f && velocityX < 0.05f))
         {
             velocityX = 0.0f;
         }
 
-        // lock forward 
+        // Lock forward and left/right movement if runKey is held and velocity exceeds max limits
         if (forwardKey && runKey && velocityZ > currentMaxVelocity)
         {
             velocityZ = currentMaxVelocity;
         }
-        // decelerate to the max walk velocity
-        else if (forwardKey && velocityZ > currentMaxVelocity)
-        {
-            velocityZ -= Time.deltaTime * deceleration;
-
-            // round to the current max velocity if within offset
-            if (velocityZ > currentMaxVelocity && velocityZ < (currentMaxVelocity + 0.05))
-            {
-                velocityZ = currentMaxVelocity;
-            }
-        }
-
-        // round to the current max velocity if within offset
-        else if (forwardKey && velocityZ < currentMaxVelocity && velocityZ > (currentMaxVelocity - 0.5f))
-        {
-            velocityZ = currentMaxVelocity;
-        }
-
-        // lock left
         if (leftKey && runKey && velocityX < -currentMaxVelocity)
         {
             velocityX = -currentMaxVelocity;
         }
-        // decelerate to the max walk velocity
-        else if (leftKey && velocityX < -currentMaxVelocity)
-        {
-            velocityX += Time.deltaTime * deceleration;
-
-            // round to the current max velocity if within offset
-            if (velocityX < -currentMaxVelocity && velocityX > (-currentMaxVelocity - 0.05f))
-            {
-                velocityX = -currentMaxVelocity;
-            }
-        }
-
-        // round to the current max velocity if within offset
-        else if (leftKey && velocityX > -currentMaxVelocity && velocityX < (-currentMaxVelocity + 0.05f))
-        {
-            velocityX = -currentMaxVelocity;
-        }
-
-        // lock right
         if (rightKey && runKey && velocityX > currentMaxVelocity)
-        {
-            velocityX = currentMaxVelocity;
-        }
-        // decelerate to the max walk velocity
-        else if (rightKey && velocityX > currentMaxVelocity)
-        {
-            velocityX -= Time.deltaTime * deceleration;
-
-            // round to the current max velocity if within offset
-            if (velocityX > currentMaxVelocity && velocityX < (currentMaxVelocity + 0.05))
-            {
-                velocityX = currentMaxVelocity;
-            }
-        }
-
-        // round to the current max velocity if within offset
-        else if (rightKey && velocityX < currentMaxVelocity && velocityX > (currentMaxVelocity - 0.05f))
         {
             velocityX = currentMaxVelocity;
         }
@@ -152,18 +107,16 @@ public class twoDAnimateStateController : MonoBehaviour
         bool leftKey = Input.GetKey(KeyCode.A);
         bool rightKey = Input.GetKey(KeyCode.D);
 
-        // set current maxVelocity this is called a ternary operator
-        float currentMaxVelocity = runKey ? maximumRunVelocity : maximumWalkVelocity;
-
+        // Smoothly transition the max velocity between walk and run using Mathf.Lerp
+        float targetMaxVelocity = runKey ? maximumRunVelocity : maximumWalkVelocity;
+        currentMaxVelocity = Mathf.Lerp(currentMaxVelocity, targetMaxVelocity, smoothTime * Time.deltaTime);
         // handle velocity changes
         lockOrResetVelocity(forwardKey, runKey, leftKey, rightKey, currentMaxVelocity);
         changeVelocity(forwardKey, runKey, leftKey, rightKey, currentMaxVelocity);
 
-
-
         // set the animator parameters to my local variables values 
         animator.SetFloat(velocityZHash, velocityZ);
         animator.SetFloat(velocityXHash, velocityX);
-        
+
     }
 }
